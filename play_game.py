@@ -13,7 +13,13 @@ EPSILON_END = 0.001 #0.02
 EPSILON_DECAY = 10000
 LR = 5e-4
 
-CartPoleDQN = DQN_model.DQN(BUFFER_SIZE, env)
-CartPoleDQN.set_hyperparameters(LR, MIN_REPLY_SIZE, EPSILON_DECAY,
+#
+# CartPoleDQN = DQN_model.DQN(BUFFER_SIZE, env)
+# CartPoleDQN.set_hyperparameters(LR, MIN_REPLY_SIZE, EPSILON_DECAY,
+#                             EPSILON_START, EPSILON_END, BATCH_SIZE, GAMMA)
+# model = CartPoleDQN.train()
+env=gym.make("ALE/Breakout-v5", render_mode="rgb_array")
+BreakoutDQN = DQN_model.DQN(BUFFER_SIZE, env)
+BreakoutDQN.set_hyperparameters(LR, MIN_REPLY_SIZE, EPSILON_DECAY,
                             EPSILON_START, EPSILON_END, BATCH_SIZE, GAMMA)
-model = CartPoleDQN.train()
+model = BreakoutDQN.train()

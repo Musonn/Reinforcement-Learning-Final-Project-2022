@@ -24,7 +24,7 @@ class Network(nn.Module):
 
     def act(self,obs):
         obs_t = torch.as_tensor(obs, dtype=torch.float32)
-        q_values = self(obs_t.unsqueeze(0))
+        q_values = self(obs_t.reshape(-1).unsqueeze(0))
 
         max_q_index = torch.argmax(q_values, dim=1)[0]
         action = max_q_index.detach().item()
@@ -32,7 +32,7 @@ class Network(nn.Module):
         return action
 
 class DQN():
-    def __init__(self, BUFFER_SIZE, env):
+    def __init__(self, BUFFER_SIZE, env, use_cuda=True):
         self.env = env
         self.replay_buffer = deque(maxlen=BUFFER_SIZE)
         self.rew_buffer = deque([0.0],maxlen=100)
@@ -48,6 +48,10 @@ class DQN():
         self.counter = 0
 
         self.online_net = Network(env)
+
+        if use_cuda:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print('use', device)
 
     def set_hyperparameters(self, LR, MIN_REPLY_SIZE, EPSILON_DECAY, 
                             EPSILON_START, EPSILON_END, BATCH_SIZE, GAMMA):
@@ -115,11 +119,11 @@ class DQN():
             dones = np.asarray([t[3] for t in transitions])
             new_obses = np.asarray([t[4] for t in transitions])
 
-            obses_t = torch.as_tensor(obses, dtype=torch.float32)
+            obses_t = torch.as_tensor(obses, dtype=torch.float32).reshape(self.BATCH_SIZE, -1)
             actions_t = torch.as_tensor(actions, dtype=torch.int64).unsqueeze(-1)
             rews_t = torch.as_tensor(rews, dtype=torch.float32).unsqueeze(-1)
             dones_t = torch.as_tensor(dones, dtype=torch.float32).unsqueeze(-1)
-            new_obses_t = torch.as_tensor(new_obses, dtype=torch.float32)
+            new_obses_t = torch.as_tensor(new_obses, dtype=torch.float32).reshape(self.BATCH_SIZE, -1)
 
 
             # Compute Targets
