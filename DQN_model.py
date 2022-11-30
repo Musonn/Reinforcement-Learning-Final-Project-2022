@@ -13,18 +13,22 @@ class Network(nn.Module):
         in_features = int(np.prod(env.observation_space.shape))
 
         self.net = nn.Sequential(
-            nn.Linear(in_features,64),
+            nn.Conv2d(3, 32, 8, stride=4),
             nn.ReLU(),
-            nn.Linear(64,32),
+            nn.Conv2d(32, 64, 4, stride=2),
             nn.ReLU(),
-            nn.Linear(32,env.action_space.n))
+            nn.Conv2d(64, 64, 3, stride=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.LazyLinear(env.action_space.n, bias = False))
         
     def forward(self,x):
         return self.net(x)
 
-    def act(self,obs):
+    def act(self,obs, device):
         obs_t = torch.as_tensor(obs, dtype=torch.float32)
-        q_values = self(obs_t.reshape(-1).unsqueeze(0))
+        obs_t = torch.permute(obs_t, (2,0,1)).to(device)
+        q_values = self(obs_t.unsqueeze(0)) # unsqueeze to give a dimension for batch
 
         max_q_index = torch.argmax(q_values, dim=1)[0]
         action = max_q_index.detach().item()
@@ -47,11 +51,11 @@ class DQN():
         self.result = np.zeros(self.n_set)
         self.counter = 0
 
-        self.online_net = Network(env)
-
         if use_cuda:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            print('use', device)
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print('use', self.device)
+
+        self.online_net = Network(env).to(self.device)
 
     def set_hyperparameters(self, LR, MIN_REPLY_SIZE, EPSILON_DECAY, 
                             EPSILON_START, EPSILON_END, BATCH_SIZE, GAMMA):
@@ -65,7 +69,7 @@ class DQN():
 
     def init_buffer(self):
         #initiallize replay buffer
-        obs, *_ = self.env.reset()
+        obs = self.env.reset()
         for _ in range(self.MIN_REPLY_SIZE):
             action = self.env.action_space.sample()
             new_obs, rew, done, *_ = self.env.step(action)
@@ -74,16 +78,17 @@ class DQN():
             obs = new_obs
 
             if done:
-                obs, *_ = self.env.reset()
+                obs= self.env.reset()
         
         return
     
     def train(self, verbose=True) -> Network:
         self.optimizer = torch.optim.Adam(self.online_net.parameters(), lr=self.learning_rate)
+        self.online_net.train()
         self.init_buffer()
 
         # Main Training Loop
-        obs, *_ = self.env.reset()
+        obs = self.env.reset()
 
         for step in itertools.count():
             epsilon = np.interp(step, [0, self.EPSILON_DECAY], [self.EPSILON_START, self.EPSILON_END])
@@ -91,7 +96,7 @@ class DQN():
             if rnd_sample <= epsilon:
                 action = self.env.action_space.sample()
             else:
-                action = self.online_net.act(obs)
+                action = self.online_net.act(obs, self.device)
 
             new_obs, rew, done, *_ = self.env.step(action)
             transition = (obs, action, rew, done, new_obs)
@@ -104,7 +109,7 @@ class DQN():
             if done:
                 self.episode += 1
                 
-                obs, *_ = self.env.reset()
+                obs= self.env.reset()
                 self.step_list.append(self.episode_step)
                 self.rew_buffer.append(self.episode_reward)
                 self.episode_reward = 0.0
@@ -119,12 +124,17 @@ class DQN():
             dones = np.asarray([t[3] for t in transitions])
             new_obses = np.asarray([t[4] for t in transitions])
 
-            obses_t = torch.as_tensor(obses, dtype=torch.float32).reshape(self.BATCH_SIZE, -1)
+            obses_t = torch.as_tensor(obses, dtype=torch.float32)
             actions_t = torch.as_tensor(actions, dtype=torch.int64).unsqueeze(-1)
             rews_t = torch.as_tensor(rews, dtype=torch.float32).unsqueeze(-1)
             dones_t = torch.as_tensor(dones, dtype=torch.float32).unsqueeze(-1)
-            new_obses_t = torch.as_tensor(new_obses, dtype=torch.float32).reshape(self.BATCH_SIZE, -1)
+            new_obses_t = torch.as_tensor(new_obses, dtype=torch.float32)
 
+            obses_t = torch.permute(obses_t, (0, 3, 1, 2)).to(self.device)
+            actions_t = actions_t.to(self.device)
+            rews_t = rews_t.to(self.device)
+            dones_t = dones_t.to(self.device)
+            new_obses_t = torch.permute(new_obses_t, (0, 3, 1, 2)).to(self.device)
 
             # Compute Targets
             target_q_values = self.online_net(new_obses_t)
