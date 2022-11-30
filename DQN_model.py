@@ -39,7 +39,6 @@ class DQN():
     def __init__(self, BUFFER_SIZE, env, use_cuda=True):
         self.env = env
         self.replay_buffer = deque(maxlen=BUFFER_SIZE)
-        self.rew_buffer = deque([0.0],maxlen=100)
         self.n_set = 40
         self.set_size = 10
         self.step_list = deque([0.0],maxlen=self.set_size)
@@ -110,8 +109,7 @@ class DQN():
                 self.episode += 1
                 
                 obs= self.env.reset()
-                self.step_list.append(self.episode_step)
-                self.rew_buffer.append(self.episode_reward)
+                self.step_list.append(self.episode_reward)
                 self.episode_reward = 0.0
                 self.episode_step = 0.0
 
